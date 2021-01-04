@@ -14,9 +14,11 @@ import time
 up = 2
 down = 3
 
+
 # TODO: Pre-process the image
 
-def ProcessImage(state):
+
+def process_image(state):
     # Pre-process 210x160x3 frame into 6400(80x80) 1D float vector
     state = state[35:195]  # Crop
     state = state[::2, ::2, 0]  # Downsample by factor of 2
@@ -26,10 +28,11 @@ def ProcessImage(state):
     state[state != 0] = 1
     return state.astype(np.float).ravel()
 
-def Main():
-    unlimitedRefresh = False
-    refreshRate = 1/60
-    timeStamp = time.time()
+
+def main():
+    unlimited_refresh = False
+    refresh_rate = 1 / 60
+    time_stamp = time.time()
 
     # Check for GPU
     if tf.test.gpu_device_name():
@@ -43,23 +46,23 @@ def Main():
     print("Action space: " + str(env.action_space))
     print("Observation space: " + str(env.observation_space))
 
-    firstObs = env.reset()
+    first_obs = env.reset()
     # Inspect a pre-processed image
-    firstObs = ProcessImage(firstObs).reshape(80,80)
-    plt.imshow(firstObs, cmap='gray')
+    first_obs = process_image(first_obs).reshape(80, 80)
+    plt.imshow(first_obs, cmap='gray')
     plt.show()
 
-    while(True):
-        if(unlimitedRefresh or time.time() - timeStamp >= refreshRate):
-            timeStamp = time.time()
+    while True:
+        if unlimited_refresh or time.time() - time_stamp >= refresh_rate:
+            time_stamp = time.time()
 
             env.render()
             state, reward, done, info = env.step(env.action_space.sample())
 
             # TODO: Add x previous frames
-            state = ProcessImage(state).reshape(80, 80)
+            state = process_image(state).reshape(80, 80)
 
-            if(done):
+            if done:
                 env.reset()
 
             # TODO: Create a model
@@ -74,9 +77,7 @@ def Main():
 
             # TODO: Display the history of training
 
-
-
     env.close()
 
 
-Main()
+main()
