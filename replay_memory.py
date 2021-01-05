@@ -1,6 +1,7 @@
 from collections import deque
 
-class replay_memory:
+
+class ReplayMemory:
     def __init__(self, bufferSize, miniBatchSize):
         self.replayBuffer = deque(maxlen=bufferSize)
         self.miniBatchSize = miniBatchSize

@@ -10,13 +10,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import time
+import random
 
-up = 2
-down = 3
+from replay_memory import*
 
+# 0 -> No move
+# 2 -> Up
+# 3 -> Down
+actions = [0, 2, 3]
 
 # TODO: Pre-process the image
-
 
 def process_image(state):
     # Pre-process 210x160x3 frame into 6400(80x80) 1D float vector
@@ -29,10 +32,32 @@ def process_image(state):
     return state.astype(np.float).ravel()
 
 
+def step(env, epsilon):
+    action = 0
+
+    # Epsilon-greedy algorithm
+    if random.uniform(0, 1) <= epsilon:
+        action = actions[np.random.randint(0, 3)]
+    else:
+        action = actions[2]         # TODO: Choose from model prediction
+
+    state, reward, done, info = env.step(action)
+    return state, action, reward, done, info
+
+
 def main():
-    unlimited_refresh = False
+    # ---Setup variables---
+    unlimited_refresh = True
     refresh_rate = 1 / 60
     time_stamp = time.time()
+
+    episodes = 200
+
+    epsilon = 0.99
+    min_epsilon = 0.1
+    epsilon_decay = 0.000
+
+    replay_memory = ReplayMemory(5000, 64)
 
     # Check for GPU
     if tf.test.gpu_device_name():
@@ -47,35 +72,51 @@ def main():
     print("Observation space: " + str(env.observation_space))
 
     first_obs = env.reset()
-    # Inspect a pre-processed image
+    # Inspect the first frame
     first_obs = process_image(first_obs).reshape(80, 80)
     plt.imshow(first_obs, cmap='gray')
     plt.show()
 
-    while True:
-        if unlimited_refresh or time.time() - time_stamp >= refresh_rate:
-            time_stamp = time.time()
+    for _ in range(episodes):
+        first_obs = env.reset()
 
-            env.render()
-            state, reward, done, info = env.step(env.action_space.sample())
+        # Wait until the ball has spawn
+        for pre in range(20):
+            env.step(0)
 
-            # TODO: Add x previous frames
-            state = process_image(state).reshape(80, 80)
+        first_obs = process_image(first_obs)
 
-            if done:
-                env.reset()
+        current_state = first_obs
 
-            # TODO: Create a model
+        while True:
+            if unlimited_refresh or time.time() - time_stamp >= refresh_rate:
+                time_stamp = time.time()
+                env.render()
 
-            # TODO: Create a target-model for predicting the target (future reward)
+                new_state, action, reward, done, info = step(env, epsilon)
 
-            # TODO: Setup replay memory
+                epsilon = max(min_epsilon, epsilon - epsilon_decay)
 
-            # TODO: Implement the q-learning part
+                # TODO: Add x previous frames
+                new_state = process_image(new_state)
 
-            # TODO: Train the model
+                # TODO: Create a model
 
-            # TODO: Display the history of training
+                # TODO: Create a target-model for predicting the target (future reward)
+
+                # TODO: Setup replay memory
+
+                replay_memory.add_experiences(current_state, action, reward, done, new_state)
+                current_state = new_state
+
+                # TODO: Implement the q-learning part
+
+                # TODO: Train the model
+
+                # TODO: Display the history of training
+
+                if done:
+                    break
 
     env.close()
 
