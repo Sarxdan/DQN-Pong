@@ -29,12 +29,11 @@ def process_image(state):
     state[state == 144] = 0
     state[state == 109] = 0
     state[state != 0] = 1
-    return state.astype(np.float).ravel()
+    #return state.astype(np.float).ravel()
+    return state.astype(np.float)
 
 
 def step(env, epsilon):
-    action = 0
-
     # Epsilon-greedy algorithm
     if random.uniform(0, 1) <= epsilon:
         action = actions[np.random.randint(0, 3)]
@@ -77,28 +76,32 @@ def main():
     plt.imshow(first_obs, cmap='gray')
     plt.show()
 
+
     for _ in range(episodes):
-        first_obs = env.reset()
+        first_obs = process_image(env.reset())
+        current_state = np.array([first_obs, first_obs, first_obs])
 
         # Wait until the ball has spawn
-        for pre in range(20):
-            env.step(0)
-
-        first_obs = process_image(first_obs)
-
-        current_state = first_obs
+        for pre in range(25):
+            observation, reward, done, info = env.step(0)
+            np.append(current_state[1:3], [process_image(observation)], axis=0)
 
         while True:
             if unlimited_refresh or time.time() - time_stamp >= refresh_rate:
                 time_stamp = time.time()
                 env.render()
 
+                for image in current_state:
+                    plt.imshow(image, cmap='gray')
+                    plt.show()
+
                 new_state, action, reward, done, info = step(env, epsilon)
 
                 epsilon = max(min_epsilon, epsilon - epsilon_decay)
 
                 # TODO: Add x previous frames
-                new_state = process_image(new_state)
+                new_state = process_image(new_state)                    # Single state
+                new_state = np.append(current_state[1:3], [new_state], axis=0)    # State set
 
                 # TODO: Create a model
 
