@@ -9,6 +9,7 @@ from keras.models import load_model, Sequential
 from keras.layers.convolutional import Conv2D
 from keras.optimizers import Adam
 from keras.layers.core import Activation, Dropout, Flatten, Dense
+from keras.callbacks import ModelCheckpoint
 
 import gym
 
@@ -55,7 +56,7 @@ def step(env, epsilon):
     return state, action, reward, done, info
 
 
-def train(model, target_model, replay_memory, gamma):
+def train(model, target_model, replay_memory, gamma, checkpoint):
     if len(replay_memory.replay_memory) >= replay_memory.batch_size:
         experiences = replay_memory.sample_experiences()
 
@@ -63,8 +64,8 @@ def train(model, target_model, replay_memory, gamma):
         targets = np.empty(replay_memory.batch_size)
 
         # Reshape states to 1 dimension
-        #states = np.reshape(states, (replay_memory.batch_size, 80, 80, 1))
-        #next_states = np.reshape(next_states, (replay_memory.batch_size, 80, 80, 1))
+        # states = np.reshape(states, (replay_memory.batch_size, 80, 80, 1))
+        # next_states = np.reshape(next_states, (replay_memory.batch_size, 80, 80, 1))
 
         for i in range(replay_memory.batch_size):
             if dones[i]:
@@ -75,7 +76,7 @@ def train(model, target_model, replay_memory, gamma):
                 q_future = np.amax(target_model.predict(state))
                 target = rewards[i] + gamma * q_future
             targets[i] = target
-        model.fit(states, targets)
+        model.fit(states, targets, callbacks=[checkpoint])
 
         # TODO: Implement the q-learning part
         # for experience in experiences:
@@ -105,7 +106,7 @@ def main():
 
     gamma = 0.85
 
-    replay_memory = ReplayMemory(5000, 1)
+    replay_memory = ReplayMemory(5000, 64)
 
     rewards = np.array(episodes)
 
@@ -116,7 +117,8 @@ def main():
     else:
         print("Please install GPU version of TF")
 
-    print(device_lib.list_local_devices())
+    filepath = "ModelWeights.hdf5"
+    checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, monitor='loss', verbose=1, save_best_only=True)
 
     # Setup env and start rendering
     env = gym.make("Pong-v0")
@@ -144,6 +146,8 @@ def main():
             # np.append(current_state[1:3], [process_image(observation)], axis=0)
         current_state = process_image(current_state, replay_memory.batch_size)
 
+        steps = 0
+
         while True:
             if unlimited_refresh or time.time() - time_stamp >= refresh_rate:
                 time_stamp = time.time()
@@ -163,7 +167,12 @@ def main():
                 replay_memory.add_experiences(current_state, action, reward, new_state, done)
                 current_state = new_state
 
-                train(model, target_model, replay_memory, gamma)
+                train(model, target_model, replay_memory, gamma, checkpoint)
+
+                steps = steps + 1
+
+                if steps % 20 == 0:
+                    target_model.set_weights(model.get_weights())
 
                 if done:
                     # TODO: Display the history of training
