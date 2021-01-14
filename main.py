@@ -24,11 +24,6 @@ from model import *
 
 from tensorflow.python.client import device_lib
 
-# 0 -> No move
-# 2 -> Up
-# 3 -> Down
-actions = [0, 2, 3]
-
 
 # TODO: Pre-process the image
 
@@ -45,54 +40,9 @@ def process_image(state, batch_size):
     return np.reshape(state.astype(np.float), (80, 80, 1))
 
 
-def step(env, epsilon):
-    # Epsilon-greedy algorithm
-    if random.uniform(0, 1) <= epsilon:
-        action = actions[np.random.randint(0, 3)]
-    else:
-        action = actions[2]  # TODO: Choose from model prediction
-
-    state, reward, done, info = env.step(action)
-    return state, action, reward, done, info
-
-
-def train(model, target_model, replay_memory, gamma, checkpoint):
-    if len(replay_memory.replay_memory) >= replay_memory.batch_size:
-        experiences = replay_memory.sample_experiences()
-
-        states, actions, rewards, next_states, dones = replay_memory.sample_experiences()
-        targets = np.empty(replay_memory.batch_size)
-
-        # Reshape states to 1 dimension
-        # states = np.reshape(states, (replay_memory.batch_size, 80, 80, 1))
-        # next_states = np.reshape(next_states, (replay_memory.batch_size, 80, 80, 1))
-
-        for i in range(replay_memory.batch_size):
-            if dones[i]:
-                target = rewards[i]
-            else:
-                # Reshape to array shaped for batch
-                state = np.reshape(next_states[i], (1, 80, 80, 1))
-                q_future = np.amax(target_model.predict(state))
-                target = rewards[i] + gamma * q_future
-            targets[i] = target
-        model.fit(states, targets, callbacks=[checkpoint])
-
-        # TODO: Implement the q-learning part
-        # for experience in experiences:
-        #    state, action, reward, next_state, done = experience
-        #    target = target_model.predict(state)
-        #    if done:
-        #        target[0][action] = reward
-        #    else:
-        #        q_future = max(target_model.predict(new_state)[0])
-        #        target[0][action] = reward + q_future * gamma
-
-        # TODO: Train the model
-        #    model.fit(state, target)
-
-
 def main():
+    validation_mode = False
+
     # ---Setup variables---
     unlimited_refresh = True
     refresh_rate = 1 / 60
@@ -100,13 +50,7 @@ def main():
 
     episodes = 300
 
-    epsilon = 0.99
-    min_epsilon = 0.1
-    epsilon_decay = 0.00001
-
-    gamma = 0.85
-
-    replay_memory = ReplayMemory(5000, 64)
+    replay_memory = ReplayMemory(5000, 32)
 
     rewards = np.array(episodes)
 
@@ -116,9 +60,6 @@ def main():
 
     else:
         print("Please install GPU version of TF")
-
-    filepath = "ModelWeights.hdf5"
-    checkpoint = tf.keras.callbacks.ModelCheckpoint(filepath, monitor='loss', verbose=1, save_best_only=True)
 
     # Setup env and start rendering
     env = gym.make("Pong-v0")
@@ -131,53 +72,77 @@ def main():
     plt.imshow(current_state, cmap='gray')
     plt.show()
 
-    # TODO: Create a model
-    # TODO: Create a target-model for predicting the target (future reward)
-    model = create_model()
-    target_model = create_model()
+    model = Model()
+    target_model = Model()
 
-    for _ in range(episodes):
-        current_state = process_image(env.reset(), replay_memory.batch_size)
-        # current_state = np.array([first_obs, first_obs, first_obs])
+    if validation_mode is False:
+        for _ in range(episodes):
+            print("Current episode: " + str(_))
+            current_state = process_image(env.reset(), replay_memory.batch_size)
 
-        # Wait until the ball has spawn
-        for pre in range(25):
-            current_state, reward, done, info = env.step(0)
-            # np.append(current_state[1:3], [process_image(observation)], axis=0)
-        current_state = process_image(current_state, replay_memory.batch_size)
+            # Wait until the ball has spawn
+            for pre in range(25):
+                current_state, reward, done, info = env.step(0)
+            current_state = process_image(current_state, replay_memory.batch_size)
 
-        steps = 0
+            steps = 0
 
-        while True:
-            if unlimited_refresh or time.time() - time_stamp >= refresh_rate:
-                time_stamp = time.time()
-                env.render()
+            while True:
+                if unlimited_refresh or time.time() - time_stamp >= refresh_rate:
+                    time_stamp = time.time()
+                    env.render()
 
-                new_state, action, reward, done, info = step(env, epsilon)
+                    new_state, action, reward, done, info = model.step(env, current_state)
+                    new_state = process_image(new_state, replay_memory.batch_size)  # Single state
 
-                # Decrease epsilon
-                epsilon = max(min_epsilon, epsilon - epsilon_decay)
+                    # Add experience to replay memory
+                    replay_memory.add_experiences(current_state, action, reward, new_state, done)
+                    current_state = new_state
 
-                # TODO: Add x previous frames
-                new_state = process_image(new_state, replay_memory.batch_size)  # Single state
-                # new_state = np.append(current_state[1:3], [new_state], axis=0)    # Stack states
+                    model.train(target_model.model, replay_memory)
 
-                # TODO: Setup replay memory
-                # Add experience to replay memory
-                replay_memory.add_experiences(current_state, action, reward, new_state, done)
-                current_state = new_state
+                    steps = steps + 1
 
-                train(model, target_model, replay_memory, gamma, checkpoint)
+                    if steps % 20 == 0:
+                        target_model.model.set_weights(model.model.get_weights())
 
-                steps = steps + 1
+                    if done:
+                        # TODO: Display the history of training
+                        rewards = np.append(rewards, reward)
+                        break
 
-                if steps % 20 == 0:
-                    target_model.set_weights(model.get_weights())
 
-                if done:
-                    # TODO: Display the history of training
-                    rewards = np.append(rewards, reward)
-                    break
+    elif validation_mode:
+        for _ in range(episodes):
+            current_state = process_image(env.reset(), replay_memory.batch_size)
+
+            # Wait until the ball has spawn
+            for pre in range(25):
+                current_state, reward, done, info = env.step(0)
+            current_state = process_image(current_state, replay_memory.batch_size)
+
+            steps = 0
+
+            while True:
+                if unlimited_refresh or time.time() - time_stamp >= refresh_rate:
+                    time_stamp = time.time()
+                    env.render()
+
+                    new_state, action, reward, done, info = model.validate(env, current_state)
+                    new_state = process_image(new_state, replay_memory.batch_size)  # Single state
+
+                    # Add experience to replay memory
+                    replay_memory.add_experiences(current_state, action, reward, new_state, done)
+                    current_state = new_state
+
+                    model.train(target_model, replay_memory)
+
+                    steps = steps + 1
+
+                    if done:
+                        # TODO: Display the history of training
+                        rewards = np.append(rewards, reward)
+                        break
 
     env.close()
 
