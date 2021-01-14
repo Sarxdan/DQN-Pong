@@ -65,14 +65,14 @@ class Model():
     def step(self, env, state):
         # Epsilon-greedy algorithm
         if random.uniform(0, 1) <= self.epsilon:
-            action = actions[np.random.randint(0, 3)]
+            action = np.random.randint(0, 3)
         else:
             state = np.reshape(state, (1, 80, 80, 1))
-            action = actions[np.argmax(self.model.predict(state))]
+            action = np.argmax(self.model.predict(state))
 
         self.epsilon = max(self.min_epsilon, self.epsilon - self.epsilon_decay)
 
-        state, reward, done, info = env.step(action)
+        state, reward, done, info = env.step(actions[action])
         return state, action, reward, done, info
 
     def train(self, target_model, replay_memory):
@@ -81,6 +81,7 @@ class Model():
             experiences = replay_memory.sample_experiences()
 
             for state, action, reward, next_state, done in experiences:
+                state = np.reshape(state, (1, 80, 80, 1))
                 target = target_model.predict(state)
                 if done:
                     target[0][action] = reward
@@ -93,6 +94,6 @@ class Model():
 
     def validate(self, env, state):
         state = np.reshape(state, (1, 80, 80, 1))
-        action = actions[np.argmax(self.model.predict(state))]
-        state, reward, done, info = env.step(action)
+        action = np.argmax(self.model.predict(state))
+        state, reward, done, info = env.step(actions[action])
         return state, action, reward, done, info
